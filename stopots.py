@@ -273,7 +273,8 @@ def proxima():
 
         sala["rodada"] += 1
         preparar_rodada(sala)
-
+        if respostas == respostas:
+            resultado = + 5
     return jsonify(ok=True, fim=False)
 
 
