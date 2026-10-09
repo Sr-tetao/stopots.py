@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Stopots Online</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
+
+</head>
+
+<body>
+
+    <header>
+
+        <div class="logo">
+            🎯
+        </div>
+
+        <div>
+
+            <h1>Stopots</h1>
+
+            <p>Jogo de palavras online</p>
+
+        </div>
+
+    </header>
+
+
+    <main>
+
+        <!-- MENU -->
+
+        <section
+            id="menu"
+            class="tela ativa"
+        >
+
+            <div class="card">
+
+                <h2>🎮 Jogar Stopots</h2>
+
+                <p>
+                    Escolha uma opção para começar.
+                </p>
+
+                <input
+                    id="nomeMenu"
+                    type="text"
+                    maxlength="20"
+                    placeholder="Digite seu nome"
+                >
+
+                <button
+                    onclick="criarSala()"
+                    class="principal"
+                >
+                    🏠 Criar sala
+                </button>
+
+                <div class="separador">
+                    OU
+                </div>
+
+                <input
+                    id="codigoMenu"
+                    type="text"
+                    maxlength="5"
+                    placeholder="Código da sala"
+                >
+
+                <button
+                    onclick="entrarSala()"
+                >
+                    🚪 Entrar em uma sala
+                </button>
+
+                <p
+                    id="mensagemMenu"
+                    class="mensagem"
+                ></p>
+
+            </div>
+
+        </section>
+
+
+        <!-- LOBBY -->
+
+        <section
+            id="lobby"
+            class="tela"
+        >
+
+            <div class="card">
+
+                <h2>🏠 Sala criada</h2>
+
+                <div class="codigo">
+
+                    <span>Código da sala</span>
+
+                    <strong id="codigoSala">
+                        -----
+                    </strong>
+
+                </div>
+
+                <p>
+                    Compartilhe este código com o outro jogador.
+                </p>
+
+                <div
+                    id="listaLobby"
+                    class="jogadores"
+                ></div>
+
+
+                <div id="opcoesHost">
+
+                    <h3>⚙️ Configurações</h3>
+
+                    <label>
+                        Número de rodadas
+                    </label>
+
+                    <select id="rodadas">
+
+                        <option value="3">
+                            3 rodadas
+                        </option>
+
+                        <option
+                            value="5"
+                            selected
+                        >
+                            5 rodadas
+                        </option>
+
+                        <option value="10">
+                            10 rodadas
+                        </option>
+
+                    </select>
+
+
+                    <h3>Categorias</h3>
+
+                    <div
+                        id="categorias"
+                        class="categorias"
+                    ></div>
+
+
+                    <button
+                        onclick="iniciarJogo()"
+                        class="principal"
+                    >
+                        ▶️ Iniciar jogo
+                    </button>
+
+                </div>
+
+
+                <p
+                    id="mensagemLobby"
+                    class="mensagem"
+                ></p>
+
+            </div>
+
+        </section>
+
+
+        <!-- JOGO -->
+
+        <section
+            id="jogo"
+            class="tela"
+        >
+
+            <div class="topo-jogo">
+
+                <div>
+                    Rodada
+                    <strong id="rodadaAtual">
+                        1
+                    </strong>
+                    /
+                    <span id="totalRodadas">
+                        5
+                    </span>
+                </div>
+
+                <div>
+                    Respostas:
+                    <strong id="respostasRecebidas">
+                        0
+                    </strong>
+                    / 2
+                </div>
+
+            </div>
+
+
+            <div class="card destaque">
+
+                <p class="categoria-texto">
+                    Categoria
+                </p>
+
+                <h2 id="categoriaAtual">
+                    Nome
+                </h2>
+
+                <div class="letra">
+
+                    <span>A letra é</span>
+
+                    <strong id="letraAtual">
+                        A
+                    </strong>
+
+                </div>
+
+                <p>
+                    Digite uma palavra que comece
+                    com a letra indicada.
+                </p>
+
+
+                <input
+                    id="resposta"
+                    type="text"
+                    maxlength="40"
+                    placeholder="Digite sua resposta"
+                    autocomplete="off"
+                >
+
+                <button
+                    id="botaoResponder"
+                    onclick="responder()"
+                    class="principal"
+                >
+                    ✅ Responder
+                </button>
+
+                <p
+                    id="mensagemJogo"
+                    class="mensagem"
+                ></p>
+
+            </div>
+
+
+            <div
+                id="placar"
+                class="placar"
+            ></div>
+
+
+            <div
+                id="resultadoRodada"
+                class="resultado"
+            ></div>
+
+
+            <button
+                id="botaoProxima"
+                onclick="proximaRodada()"
+                class="principal escondido"
+            >
+                ▶️ Próxima rodada
+            </button>
+
+        </section>
+
+
+        <!-- FINAL -->
+
+        <section
+            id="final"
+            class="tela"
+        >
+
+            <div class="card">
+
+                <h2>🏆 Fim de jogo!</h2>
+
+                <p>
+                    Resultado final
+                </p>
+
+                <div
+                    id="resultadoFinal"
+                    class="resultado-final"
+                ></div>
+
+                <button
+                    onclick="voltarMenu()"
+                    class="principal"
+                >
+                    🏠 Voltar ao menu
+                </button>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <footer>
+
+        <p>
+            🎯 Stopots Online
+        </p>
+
+        <p>
+            Jogue com seus amigos
+        </p>
+
+    </footer>
+
+
+    <script
+        src="{{ url_for('static', filename='jogo.js') }}"
+    ></script>
+
+</body>
+
+</html>
