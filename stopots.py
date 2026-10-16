@@ -7,12 +7,11 @@ import unicodedata
 
 app = Flask(__name__)
 
-# Salas guardadas na memória do servidor.
-# Atenção: as salas são reiniciadas quando o serviço reinicia.
 salas = {}
 trava = threading.RLock()
 
 LETRAS = "ABCDEFGHIJKLMNOPRSTUV"
+
 CATEGORIAS_PADRAO = [
     "Nome", "Objeto", "Cor", "Animal", "Comida",
     "Cidade", "Profissão", "Minha sogra", "Palavra difícil"
@@ -20,13 +19,18 @@ CATEGORIAS_PADRAO = [
 
 
 def normalizar(texto):
-    texto = unicodedata.normalize("NFD", texto.strip().lower())
-    return "".join(c for c in texto if unicodedata.category(c) != "Mn")
+    texto = unicodedata.normalize("NFD", str(texto).strip().lower())
+    return "".join(
+        c for c in texto
+        if unicodedata.category(c) != "Mn"
+    )
 
 
 def gerar_codigo():
     while True:
-        codigo = "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
+        codigo = "".join(
+            random.choices(string.ascii_uppercase + string.digits, k=5)
+        )
         if codigo not in salas:
             return codigo
 
@@ -52,6 +56,46 @@ def dados_jogadores(sala):
     ]
 
 
+def rodada_fechada(sala):
+    return len(sala["respostas"]) == 2
+
+
+def fechar_rodada(sala):
+    """Calcula os pontos uma única vez quando os dois terminaram."""
+    if rodada_fechada(sala):
+        return
+
+    if len(sala["respostas"]) < 2:
+        return
+
+    respostas_validas = [
+        item for item in sala["respostas"].values()
+        if item["correta"] and not item.get("desistiu", False)
+    ]
+
+    palavras_iguais = (
+        len(respostas_validas) == 2
+        and normalizar(respostas_validas[0]["resposta"])
+        == normalizar(respostas_validas[1]["resposta"])
+    )
+
+    sala["resultado"] = {}
+
+    for jogador_id, item in sala["respostas"].items():
+        pontos = 0
+
+        if item["correta"] and not item.get("desistiu", False):
+            pontos = 5 if palavras_iguais else 10
+            sala["jogadores"][jogador_id]["pontos"] += pontos
+
+        sala["resultado"][jogador_id] = {
+            "resposta": item["resposta"],
+            "correta": item["correta"],
+            "desistiu": item.get("desistiu", False),
+            "pontos_ganhos": pontos
+        }
+
+
 def preparar_rodada(sala):
     sala["respostas"] = {}
     sala["resultado"] = {}
@@ -74,6 +118,7 @@ def criar_sala():
 
     with trava:
         codigo = gerar_codigo()
+
         salas[codigo] = {
             "status": "lobby",
             "jogadores": {
@@ -120,21 +165,17 @@ def entrar_sala():
 @app.route("/api/estado/<codigo>", methods=["GET"])
 def estado(codigo):
     jogador_id = request.args.get("jogador", "")
+
     with trava:
         sala = procurar_sala(codigo)
 
         if sala is None:
             return jsonify(ok=False, erro="Sala não encontrada."), 404
 
-        jogador = procurar_jogador(sala, jogador_id)
-        if jogador is None:
+        if procurar_jogador(sala, jogador_id) is None:
             return jsonify(ok=False, erro="Jogador inválido."), 400
 
         minha_resposta = sala["respostas"].get(jogador_id)
-        minha_resposta_ok = (
-            minha_resposta is not None
-            and minha_resposta["correta"]
-        )
 
         return jsonify(
             ok=True,
@@ -145,8 +186,17 @@ def estado(codigo):
             total_rodadas=sala["total_rodadas"],
             categoria=sala["categoria"],
             letra=sala["letra"],
-            minha_resposta=minha_resposta["resposta"] if minha_resposta else "",
-            minha_resposta_ok=minha_resposta_ok,
+            minha_resposta=(
+                minha_resposta["resposta"] if minha_resposta else ""
+            ),
+            minha_resposta_ok=(
+                minha_resposta["correta"] if minha_resposta else False
+            ),
+            desisti=(
+                minha_resposta.get("desistiu", False)
+                if minha_resposta else False
+            ),
+            rodada_fechada=rodada_fechada(sala),
             resultado=sala["resultado"]
         )
 
@@ -180,11 +230,15 @@ def iniciar():
 
     with trava:
         sala = procurar_sala(codigo)
+
         if sala is None:
             return jsonify(ok=False, erro="Sala não encontrada."), 404
 
         if jogador_id != "p1":
-            return jsonify(ok=False, erro="Somente quem criou a sala pode iniciar."), 403
+            return jsonify(
+                ok=False,
+                erro="Somente quem criou a sala pode iniciar."
+            ), 403
 
         if len(sala["jogadores"]) != 2:
             return jsonify(ok=False, erro="Aguarde o segundo jogador."), 400
@@ -213,6 +267,7 @@ def responder():
 
     with trava:
         sala = procurar_sala(codigo)
+
         if sala is None:
             return jsonify(ok=False, erro="Sala não encontrada."), 404
 
@@ -222,29 +277,123 @@ def responder():
         if sala["status"] != "jogando":
             return jsonify(ok=False, erro="A partida não está em andamento."), 400
 
-        if jogador_id in sala["respostas"]:
-            return jsonify(ok=False, erro="Você já respondeu nesta rodada."), 400
+        if rodada_fechada(sala):
+            return jsonify(ok=False, erro="A rodada já terminou."), 400
 
-        correta = normalizar(resposta).startswith(normalizar(sala["letra"]))
+        if jogador_id in sala["respostas"]:
+            return jsonify(
+                ok=False,
+                erro="Você já respondeu. Use a opção de corrigir."
+            ), 400
+
+        correta = normalizar(resposta).startswith(
+            normalizar(sala["letra"])
+        )
+
         sala["respostas"][jogador_id] = {
             "resposta": resposta,
-            "correta": correta
+            "correta": correta,
+            "desistiu": False
         }
 
-        if correta:
-            sala["jogadores"][jogador_id]["pontos"] += 10
-
-        # Quando os dois respondem, preparar o resultado da rodada.
-        if len(sala["respostas"]) == 2:
-            sala["resultado"] = {
-                pid: {
-                    "resposta": item["resposta"],
-                    "correta": item["correta"]
-                }
-                for pid, item in sala["respostas"].items()
-            }
+        if rodada_fechada(sala):
+            fechar_rodada(sala)
 
     return jsonify(ok=True, correta=correta)
+
+
+@app.route("/api/corrigir", methods=["POST"])
+def corrigir():
+    dados = request.get_json(silent=True) or {}
+    codigo = str(dados.get("sala", "")).upper()
+    jogador_id = str(dados.get("jogador", ""))
+    resposta = str(dados.get("resposta", "")).strip()[:100]
+
+    if not resposta:
+        return jsonify(ok=False, erro="Digite a palavra corrigida."), 400
+
+    with trava:
+        sala = procurar_sala(codigo)
+
+        if sala is None:
+            return jsonify(ok=False, erro="Sala não encontrada."), 404
+
+        if procurar_jogador(sala, jogador_id) is None:
+            return jsonify(ok=False, erro="Jogador inválido."), 400
+
+        if sala["status"] != "jogando":
+            return jsonify(ok=False, erro="A partida não está em andamento."), 400
+
+        if rodada_fechada(sala):
+            return jsonify(
+                ok=False,
+                erro="A rodada já terminou; não é mais possível corrigir."
+            ), 400
+
+        if jogador_id not in sala["respostas"]:
+            return jsonify(
+                ok=False,
+                erro="Envie uma resposta antes de corrigi-la."
+            ), 400
+
+        if sala["respostas"][jogador_id].get("desistiu", False):
+            return jsonify(
+                ok=False,
+                erro="Você desistiu desta rodada e não pode corrigir."
+            ), 400
+
+        correta = normalizar(resposta).startswith(
+            normalizar(sala["letra"])
+        )
+
+        sala["respostas"][jogador_id] = {
+            "resposta": resposta,
+            "correta": correta,
+            "desistiu": False
+        }
+
+    return jsonify(ok=True, correta=correta)
+
+
+@app.route("/api/desistir", methods=["POST"])
+def desistir():
+    dados = request.get_json(silent=True) or {}
+    codigo = str(dados.get("sala", "")).upper()
+    jogador_id = str(dados.get("jogador", ""))
+
+    with trava:
+        sala = procurar_sala(codigo)
+
+        if sala is None:
+            return jsonify(ok=False, erro="Sala não encontrada."), 404
+
+        if procurar_jogador(sala, jogador_id) is None:
+            return jsonify(ok=False, erro="Jogador inválido."), 400
+
+        if sala["status"] != "jogando":
+            return jsonify(ok=False, erro="A partida não está em andamento."), 400
+
+        if rodada_fechada(sala):
+            return jsonify(ok=False, erro="A rodada já terminou."), 400
+
+        if jogador_id in sala["respostas"]:
+            return jsonify(
+                ok=False,
+                erro="Você já respondeu nesta rodada."
+            ), 400
+
+        sala["respostas"][jogador_id] = {
+            "resposta": "",
+            "correta": False,
+            "desistiu": True
+        }
+
+        # A rodada fecha quando o outro jogador também responder
+        # ou desistir. O jogador que desistiu continua na partida.
+        if rodada_fechada(sala):
+            fechar_rodada(sala)
+
+    return jsonify(ok=True)
 
 
 @app.route("/api/proxima", methods=["POST"])
@@ -255,17 +404,24 @@ def proxima():
 
     with trava:
         sala = procurar_sala(codigo)
+
         if sala is None:
             return jsonify(ok=False, erro="Sala não encontrada."), 404
 
         if jogador_id != "p1":
-            return jsonify(ok=False, erro="Somente quem criou a sala pode avançar."), 403
+            return jsonify(
+                ok=False,
+                erro="Somente quem criou a sala pode avançar."
+            ), 403
 
         if sala["status"] != "jogando":
             return jsonify(ok=False, erro="Não há rodada em andamento."), 400
 
-        if len(sala["respostas"]) < 2:
-            return jsonify(ok=False, erro="Espere os dois jogadores responderem."), 400
+        if not rodada_fechada(sala):
+            return jsonify(
+                ok=False,
+                erro="Espere os dois jogadores responderem ou desistirem."
+            ), 400
 
         if sala["rodada"] >= sala["total_rodadas"]:
             sala["status"] = "finalizada"
@@ -273,8 +429,7 @@ def proxima():
 
         sala["rodada"] += 1
         preparar_rodada(sala)
-        if respostas == respostas:
-            resultado = + 5
+
     return jsonify(ok=True, fim=False)
 
 
