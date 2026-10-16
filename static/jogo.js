@@ -1,13 +1,13 @@
+
 let salaAtual = "";
 let jogadorAtual = "";
 let nomeAtual = "";
-
+let estadoAnterior = null;
+let rodadaAnterior = null;
+let atualizando = false;
 let intervalo = null;
 
-let ultimaRodada = 0;
-
-
-const CATEGORIAS = [
+const CATEGORIAS_PADRAO = [
     "Nome",
     "Objeto",
     "Cor",
@@ -19,1088 +19,544 @@ const CATEGORIAS = [
     "Palavra difícil"
 ];
 
+async function api(url, dados = null, metodo = "POST") {
+    const opcoes = {
+        method: metodo,
+        headers: {}
+    };
 
-function mostrarTela(id) {
+    if (dados !== null) {
+        opcoes.headers["Content-Type"] = "application/json";
+        opcoes.body = JSON.stringify(dados);
+    }
 
-    document
-        .querySelectorAll(".tela")
-        .forEach(tela => {
-            tela.classList.remove("ativa");
-        });
+    const resposta = await fetch(url, opcoes);
 
-    document
-        .getElementById(id)
-        .classList.add("ativa");
+    let resultado;
+    try {
+        resultado = await resposta.json();
+    } catch {
+        throw new Error("O servidor retornou uma resposta inválida.");
+    }
+
+    if (!resposta.ok || resultado.ok === false || resultado.erro) {
+        throw new Error(resultado.erro || "Ocorreu um erro.");
+    }
+
+    return resultado;
 }
 
+function mostrarTela(id) {
+    document.querySelectorAll(".tela").forEach(tela => {
+        tela.classList.remove("ativa");
+    });
+
+    const tela = document.getElementById(id);
+
+    if (tela) {
+        tela.classList.add("ativa");
+    }
+}
 
 function mensagem(id, texto) {
-
-    const elemento =
-        document.getElementById(id);
+    const elemento = document.getElementById(id);
 
     if (elemento) {
         elemento.textContent = texto;
     }
 }
 
+function mostrarBotao(id, mostrar) {
+    const elemento = document.getElementById(id);
 
-function carregarCategorias() {
-
-    const container =
-        document.getElementById("categorias");
-
-    container.innerHTML = "";
-
-    CATEGORIAS.forEach(
-        (categoria, index) => {
-
-            const div =
-                document.createElement("div");
-
-            div.className =
-                "categoria-check";
-
-            div.innerHTML = `
-                <label>
-                    <input
-                        type="checkbox"
-                        value="${categoria}"
-                        checked
-                    >
-                    ${categoria}
-                </label>
-            `;
-
-            container.appendChild(div);
-        }
-    );
-}
-
-
-async function criarSala() {
-
-    const nome =
-        document
-            .getElementById("nomeMenu")
-            .value
-            .trim();
-
-    if (!nome) {
-
-        mensagem(
-            "mensagemMenu",
-            "Digite seu nome primeiro."
-        );
-
-        return;
-    }
-
-
-    try {
-
-        const resposta =
-            await fetch(
-                "/api/criar",
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body: JSON.stringify({
-                        nome: nome
-                    })
-                }
-            );
-
-
-        const dados =
-            await resposta.json();
-
-
-        if (!dados.ok) {
-
-            mensagem(
-                "mensagemMenu",
-                dados.erro
-            );
-
-            return;
-        }
-
-
-        salaAtual = dados.sala;
-        jogadorAtual = dados.jogador;
-        nomeAtual = dados.nome;
-
-
-        document
-            .getElementById("codigoSala")
-            .textContent = salaAtual;
-
-
-        carregarCategorias();
-
-        document
-            .getElementById("opcoesHost")
-            .style.display = "block";
-
-
-        mensagem(
-            "mensagemLobby",
-            "Aguardando o segundo jogador..."
-        );
-
-
-        mostrarTela("lobby");
-
-        iniciarAtualizacao();
-
-    } catch (erro) {
-
-        mensagem(
-            "mensagemMenu",
-            "Erro ao conectar ao servidor."
-        );
+    if (elemento) {
+        elemento.classList.toggle("escondido", !mostrar);
     }
 }
-
-
-async function entrarSala() {
-
-    const nome =
-        document
-            .getElementById("nomeMenu")
-            .value
-            .trim();
-
-    const codigo =
-        document
-            .getElementById("codigoMenu")
-            .value
-            .trim()
-            .toUpperCase();
-
-
-    if (!nome) {
-
-        mensagem(
-            "mensagemMenu",
-            "Digite seu nome."
-        );
-
-        return;
-    }
-
-
-    if (!codigo) {
-
-        mensagem(
-            "mensagemMenu",
-            "Digite o código da sala."
-        );
-
-        return;
-    }
-
-
-    try {
-
-        const resposta =
-            await fetch(
-                "/api/entrar",
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body: JSON.stringify({
-                        nome: nome,
-                        sala: codigo
-                    })
-                }
-            );
-
-
-        const dados =
-            await resposta.json();
-
-
-        if (!dados.ok) {
-
-            mensagem(
-                "mensagemMenu",
-                dados.erro
-            );
-
-            return;
-        }
-
-
-        salaAtual = dados.sala;
-        jogadorAtual = dados.jogador;
-        nomeAtual = dados.nome;
-
-
-        document
-            .getElementById("codigoSala")
-            .textContent = salaAtual;
-
-
-        document
-            .getElementById("opcoesHost")
-            .style.display = "none";
-
-
-        mostrarTela("lobby");
-
-        iniciarAtualizacao();
-
-    } catch (erro) {
-
-        mensagem(
-            "mensagemMenu",
-            "Erro ao conectar ao servidor."
-        );
-    }
-}
-
 
 function iniciarAtualizacao() {
-
     if (intervalo) {
         clearInterval(intervalo);
     }
-
 
     atualizarEstado();
-
-    intervalo =
-        setInterval(
-            atualizarEstado,
-            900
-        );
+    intervalo = setInterval(atualizarEstado, 900);
 }
 
+async function criarSala() {
+    try {
+        const nome = document.getElementById("nomeMenu").value.trim();
 
-async function atualizarEstado() {
+        if (!nome) {
+            mensagem("mensagemMenu", "Digite seu nome.");
+            return;
+        }
 
-    if (!salaAtual) {
+        const dados = await api("/api/criar", { nome });
+
+        configurarJogador(dados);
+        mostrarTela("lobby");
+        iniciarAtualizacao();
+    } catch (erro) {
+        mensagem("mensagemMenu", erro.message);
+    }
+}
+
+async function entrarSala() {
+    try {
+        const nome = document.getElementById("nomeMenu").value.trim();
+        const codigo = document.getElementById("codigoMenu").value.trim();
+
+        if (!nome || !codigo) {
+            mensagem("mensagemMenu", "Digite seu nome e o código da sala.");
+            return;
+        }
+
+        const dados = await api("/api/entrar", {
+            nome,
+            sala: codigo
+        });
+
+        configurarJogador(dados);
+        mostrarTela("lobby");
+        iniciarAtualizacao();
+    } catch (erro) {
+        mensagem("mensagemMenu", erro.message);
+    }
+}
+
+function configurarJogador(dados) {
+    salaAtual = dados.sala;
+    jogadorAtual = dados.jogador;
+    nomeAtual = dados.nome;
+
+    estadoAnterior = null;
+    rodadaAnterior = null;
+
+    const codigoSala = document.getElementById("codigoSala");
+
+    if (codigoSala) {
+        codigoSala.textContent = salaAtual;
+    }
+
+    const opcoesHost = document.getElementById("opcoesHost");
+
+    if (opcoesHost) {
+        opcoesHost.style.display =
+            jogadorAtual === "p1" ? "block" : "none";
+    }
+
+    criarCategorias();
+}
+
+function criarCategorias() {
+    const container = document.getElementById("categorias");
+
+    if (!container) {
         return;
     }
 
-
-    try {
-
-        const resposta =
-            await fetch(
-                `/api/estado/${salaAtual}?jogador=${jogadorAtual}`
-            );
-
-
-        const dados =
-            await resposta.json();
-
-
-        if (!dados.ok) {
-            return;
-        }
-
-
-        atualizarJogadores(
-            dados.jogadores
-        );
-
-
-        atualizarPlacar(
-            dados.jogadores
-        );
-
-
-        document
-            .getElementById(
-                "respostasRecebidas"
-            )
-            .textContent =
-                dados.respostas_recebidas;
-
-
-        if (
-            dados.status === "lobby"
-        ) {
-
-            mostrarTela("lobby");
-
-            return;
-        }
-
-
-        if (
-            dados.status === "jogando"
-        ) {
-
-            mostrarTela("jogo");
-
-            atualizarJogo(dados);
-
-            return;
-        }
-
-
-        if (
-            dados.status === "finalizada"
-        ) {
-
-            mostrarTela("final");
-
-            atualizarFinal(dados);
-
-            return;
-        }
-
-    } catch (erro) {
-
-        console.log(
-            "Erro ao atualizar:",
-            erro
-        );
-    }
-}
-
-
-function atualizarJogadores(
-    jogadores
-) {
-
-    const container =
-        document.getElementById(
-            "listaLobby"
-        );
-
     container.innerHTML = "";
 
+    CATEGORIAS_PADRAO.forEach((categoria, indice) => {
+        const label = document.createElement("label");
+        const checkbox = document.createElement("input");
 
-    jogadores.forEach(
-        jogador => {
+        checkbox.type = "checkbox";
+        checkbox.value = categoria;
+        checkbox.checked = true;
+        checkbox.id = `categoria${indice}`;
 
-            const div =
-                document.createElement("div");
+        label.appendChild(checkbox);
+        label.appendChild(document.createTextNode(" " + categoria));
 
-            div.className =
-                "jogador";
-
-
-            div.innerHTML = `
-                <strong>
-                    ${escapeHtml(jogador.nome)}
-                </strong>
-
-                <span>
-                    ${jogador.id === "p1"
-                        ? "👑 Criador"
-                        : "🎮 Jogador"
-                    }
-                </span>
-            `;
-
-
-            container.appendChild(div);
-        }
-    );
-
-
-    if (
-        jogadores.length < 2
-    ) {
-
-        mensagem(
-            "mensagemLobby",
-            "Aguardando o segundo jogador..."
-        );
-
-    } else {
-
-        mensagem(
-            "mensagemLobby",
-            "Os dois jogadores estão na sala!"
-        );
-    }
+        container.appendChild(label);
+    });
 }
-
-
-function atualizarJogo(dados) {
-
-    document
-        .getElementById("rodadaAtual")
-        .textContent =
-            dados.rodada;
-
-
-    document
-        .getElementById("totalRodadas")
-        .textContent =
-            dados.total_rodadas;
-
-
-    document
-        .getElementById("categoriaAtual")
-        .textContent =
-            dados.categoria;
-
-
-    document
-        .getElementById("letraAtual")
-        .textContent =
-            dados.letra;
-
-
-    if (
-        ultimaRodada !== dados.rodada
-    ) {
-
-        ultimaRodada =
-            dados.rodada;
-
-        const resposta =
-            document.getElementById(
-                "resposta"
-            );
-
-        resposta.value = "";
-
-        resposta.disabled = false;
-
-
-        document
-            .getElementById(
-                "botaoResponder"
-            )
-            .disabled = false;
-
-
-        document
-            .getElementById(
-                "botaoProxima"
-            )
-            .classList.add(
-                "escondido"
-            );
-
-
-        mensagem(
-            "mensagemJogo",
-            ""
-        );
-
-
-        document
-            .getElementById(
-                "resultadoRodada"
-            )
-            .innerHTML = "";
-    }
-
-
-    if (
-        dados.minha_resposta
-    ) {
-
-        document
-            .getElementById(
-                "resposta"
-            )
-            .disabled = true;
-
-
-        document
-            .getElementById(
-                "botaoResponder"
-            )
-            .disabled = true;
-
-
-        if (
-            dados.minha_resposta_ok
-        ) {
-
-            mensagem(
-                "mensagemJogo",
-                "✅ Resposta correta! +10 pontos."
-            );
-
-        } else {
-
-            mensagem(
-                "mensagemJogo",
-                "❌ A resposta não começa com a letra correta."
-            );
-        }
-    }
-
-
-    if (
-        Object.keys(
-            dados.resultado || {}
-        ).length > 0
-    ) {
-
-        mostrarResultadoRodada(
-            dados.resultado,
-            dados.jogadores
-        );
-
-
-        if (
-            jogadorAtual === "p1"
-        ) {
-
-            document
-                .getElementById(
-                    "botaoProxima"
-                )
-                .classList.remove(
-                    "escondido"
-                );
-        }
-    }
-}
-
-
-function atualizarPlacar(
-    jogadores
-) {
-
-    const container =
-        document.getElementById(
-            "placar"
-        );
-
-    container.innerHTML = "";
-
-
-    jogadores.forEach(
-        jogador => {
-
-            const div =
-                document.createElement("div");
-
-            div.className =
-                "placar-item";
-
-
-            div.innerHTML = `
-                <div>
-                    ${escapeHtml(jogador.nome)}
-                </div>
-
-                <strong>
-                    ${jogador.pontos}
-                </strong>
-
-                <small>
-                    pontos
-                </small>
-            `;
-
-
-            container.appendChild(div);
-        }
-    );
-}
-
-
-function mostrarResultadoRodada(
-    resultado,
-    jogadores
-) {
-
-    const container =
-        document.getElementById(
-            "resultadoRodada"
-        );
-
-    container.innerHTML =
-        "<h3>Resultado da rodada</h3>";
-
-
-    jogadores.forEach(
-        jogador => {
-
-            const resultadoJogador =
-                resultado[jogador.id];
-
-
-            if (!resultadoJogador) {
-                return;
-            }
-
-
-            const div =
-                document.createElement("div");
-
-
-            div.className =
-                "resultado-item " +
-                (
-                    resultadoJogador.correta
-                        ? "correta"
-                        : "incorreta"
-                );
-
-
-            div.innerHTML = `
-                <strong>
-                    ${escapeHtml(jogador.nome)}
-                </strong>
-
-                <br>
-
-                Resposta:
-                ${escapeHtml(
-                    resultadoJogador.resposta
-                    || "(vazio)"
-                )}
-
-                <br>
-
-                ${
-                    resultadoJogador.correta
-                        ? "✅ Correta"
-                        : "❌ Incorreta"
-                }
-            `;
-
-
-            container.appendChild(div);
-        }
-    );
-}
-
 
 async function iniciarJogo() {
-
-    const checkboxes =
-        document.querySelectorAll(
-            "#categorias input[type=checkbox]"
-        );
-
-
-    const categorias = [];
-
-
-    checkboxes.forEach(
-        checkbox => {
-
-            if (checkbox.checked) {
-                categorias.push(
-                    checkbox.value
-                );
-            }
-        }
-    );
-
-
-    if (categorias.length === 0) {
-
-        mensagem(
-            "mensagemLobby",
-            "Escolha pelo menos uma categoria."
-        );
-
-        return;
-    }
-
-
-    const rodadas =
-        Number(
-            document
-                .getElementById("rodadas")
-                .value
-        );
-
-
     try {
+        const categorias = Array.from(
+            document.querySelectorAll("#categorias input:checked")
+        ).map(input => input.value);
 
-        const resposta =
-            await fetch(
-                "/api/iniciar",
-                {
-                    method: "POST",
+        const campoRodadas = document.getElementById("rodadas");
+        const rodadas = campoRodadas
+            ? Number(campoRodadas.value)
+            : 5;
 
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
+        await api("/api/iniciar", {
+            sala: salaAtual,
+            jogador: jogadorAtual,
+            categorias,
+            rodadas
+        });
 
-                    body: JSON.stringify({
-
-                        sala: salaAtual,
-
-                        jogador:
-                            jogadorAtual,
-
-                        categorias:
-                            categorias,
-
-                        rodadas:
-                            rodadas
-                    })
-                }
-            );
-
-
-        const dados =
-            await resposta.json();
-
-
-        if (!dados.ok) {
-
-            mensagem(
-                "mensagemLobby",
-                dados.erro
-            );
-
-            return;
-        }
-
-
-        mensagem(
-            "mensagemLobby",
-            "Jogo iniciado!"
-        );
-
-        ultimaRodada = 0;
-
-        atualizarEstado();
-
+        mensagem("mensagemLobby", "");
+        await atualizarEstado();
     } catch (erro) {
-
-        mensagem(
-            "mensagemLobby",
-            "Erro ao iniciar o jogo."
-        );
+        mensagem("mensagemLobby", erro.message);
     }
 }
 
+async function atualizarEstado() {
+    if (!salaAtual || atualizando) {
+        return;
+    }
+
+    atualizando = true;
+
+    try {
+        const estado = await api(
+            `/api/estado/${encodeURIComponent(salaAtual)}?jogador=${encodeURIComponent(jogadorAtual)}`,
+            null,
+            "GET"
+        );
+
+        if (
+            rodadaAnterior !== null &&
+            estado.rodada !== rodadaAnterior
+        ) {
+            const campoResposta = document.getElementById("resposta");
+
+            if (campoResposta) {
+                campoResposta.value = "";
+            }
+
+            mensagem("mensagemJogo", "");
+        }
+
+        rodadaAnterior = estado.rodada;
+        estadoAnterior = estado;
+
+        if (estado.status === "lobby") {
+            mostrarTela("lobby");
+            renderizarLobby(estado);
+        } else if (estado.status === "jogando") {
+            mostrarTela("jogo");
+            renderizarJogo(estado);
+        } else if (estado.status === "finalizada") {
+            mostrarTela("final");
+            renderizarFinal(estado);
+        }
+    } catch (erro) {
+        console.error("Erro ao atualizar:", erro);
+    } finally {
+        atualizando = false;
+    }
+}
+
+function renderizarLobby(estado) {
+    const lista = document.getElementById("listaLobby");
+
+    if (lista) {
+        lista.innerHTML = "";
+
+        estado.jogadores.forEach(jogador => {
+            const item = document.createElement("p");
+            item.textContent = `👤 ${jogador.nome}`;
+            lista.appendChild(item);
+        });
+    }
+
+    if (estado.jogadores.length < 2) {
+        mensagem("mensagemLobby", "Aguardando o segundo jogador...");
+    } else {
+        mensagem("mensagemLobby", "Os dois jogadores estão na sala!");
+    }
+
+    const opcoesHost = document.getElementById("opcoesHost");
+
+    if (opcoesHost) {
+        opcoesHost.style.display =
+            estado.sou_host ? "block" : "none";
+    }
+}
+
+function renderizarJogo(estado) {
+    const rodadaAtual = document.getElementById("rodadaAtual");
+    const totalRodadas = document.getElementById("totalRodadas");
+    const respostasRecebidas = document.getElementById("respostasRecebidas");
+    const categoriaAtual = document.getElementById("categoriaAtual");
+    const letraAtual = document.getElementById("letraAtual");
+    const campoResposta = document.getElementById("resposta");
+
+    if (rodadaAtual) rodadaAtual.textContent = estado.rodada;
+    if (totalRodadas) totalRodadas.textContent = estado.total_rodadas;
+    if (respostasRecebidas) {
+        respostasRecebidas.textContent = estado.respostas_recebidas;
+    }
+    if (categoriaAtual) categoriaAtual.textContent = estado.categoria;
+    if (letraAtual) letraAtual.textContent = estado.letra;
+
+    const minhaResposta = estado.minha_resposta || "";
+    const respondi = minhaResposta !== "" || estado.desisti;
+    const fechado = estado.rodada_fechada;
+
+    if (campoResposta) {
+        if (minhaResposta) {
+            campoResposta.value = minhaResposta;
+        }
+
+        campoResposta.disabled = fechado || estado.desisti;
+    }
+
+    mostrarBotao("botaoResponder", !fechado && !respondi);
+    mostrarBotao(
+        "botaoCorrigir",
+        !fechado && respondi && !estado.desisti
+    );
+    mostrarBotao("botaoDesistir", !fechado && !respondi);
+    mostrarBotao(
+        "botaoProxima",
+        fechado && estado.sou_host && estado.status === "jogando"
+    );
+
+    if (estado.desisti) {
+        mensagem(
+            "mensagemJogo",
+            "Você desistiu desta rodada. Na próxima, joga normalmente!"
+        );
+    } else if (respondi && !fechado) {
+        mensagem(
+            "mensagemJogo",
+            "Resposta enviada. Aguardando o outro jogador..."
+        );
+    } else if (!respondi) {
+        mensagem("mensagemJogo", "");
+    }
+
+    renderizarPlacar(estado.jogadores);
+    renderizarResultadoRodada(estado);
+}
+
+function renderizarPlacar(jogadores) {
+    const placar = document.getElementById("placar");
+
+    if (!placar) {
+        return;
+    }
+
+    placar.innerHTML = "";
+
+    const titulo = document.createElement("h3");
+    titulo.textContent = "🏆 Placar";
+    placar.appendChild(titulo);
+
+    jogadores
+        .slice()
+        .sort((a, b) => b.pontos - a.pontos)
+        .forEach(jogador => {
+            const linha = document.createElement("p");
+            linha.textContent =
+                `${jogador.nome}: ${jogador.pontos} pontos`;
+
+            placar.appendChild(linha);
+        });
+}
+
+function renderizarResultadoRodada(estado) {
+    const resultado = document.getElementById("resultadoRodada");
+
+    if (!resultado) {
+        return;
+    }
+
+    resultado.innerHTML = "";
+
+    if (!estado.rodada_fechada) {
+        return;
+    }
+
+    Object.entries(estado.resultado || {}).forEach(([id, item]) => {
+        const linha = document.createElement("p");
+
+        const jogador = estado.jogadores.find(p => p.id === id);
+        const nome = jogador ? jogador.nome : id;
+
+        if (item.desistiu) {
+            linha.textContent =
+                `${nome}: desistiu da rodada (0 pontos)`;
+        } else {
+            linha.textContent =
+                `${nome}: ${item.resposta} — ` +
+                `${item.correta ? "válida" : "inválida"} ` +
+                `(+${item.pontos_ganhos || 0} pontos)`;
+        }
+
+        resultado.appendChild(linha);
+    });
+
+    if (!estado.sou_host && estado.status !== "finalizada") {
+        const aviso = document.createElement("p");
+        aviso.textContent =
+            "Aguardando o anfitrião iniciar a próxima rodada...";
+        resultado.appendChild(aviso);
+    }
+}
 
 async function responder() {
+    try {
+        const campo = document.getElementById("resposta");
+        const resposta = campo.value.trim();
 
-    const campo =
-        document.getElementById(
-            "resposta"
-        );
+        if (!resposta) {
+            mensagem("mensagemJogo", "Digite uma resposta.");
+            return;
+        }
 
-
-    const resposta =
-        campo.value.trim();
-
-
-    if (!resposta) {
+        const resultado = await api("/api/responder", {
+            sala: salaAtual,
+            jogador: jogadorAtual,
+            resposta
+        });
 
         mensagem(
             "mensagemJogo",
-            "Digite uma resposta."
+            resultado.correta
+                ? "Resposta enviada! A palavra começa com a letra certa."
+                : "Resposta enviada, mas a palavra não começa com a letra indicada."
         );
 
+        await atualizarEstado();
+    } catch (erro) {
+        mensagem("mensagemJogo", erro.message);
+    }
+}
+
+async function corrigirPalavra() {
+    try {
+        const resposta = document.getElementById("resposta").value.trim();
+
+        if (!resposta) {
+            mensagem("mensagemJogo", "Digite a palavra corrigida.");
+            return;
+        }
+
+        await api("/api/corrigir", {
+            sala: salaAtual,
+            jogador: jogadorAtual,
+            resposta
+        });
+
+        mensagem("mensagemJogo", "Palavra corrigida!");
+        await atualizarEstado();
+    } catch (erro) {
+        mensagem("mensagemJogo", erro.message);
+    }
+}
+
+async function desistirRodada() {
+    if (
+        !window.confirm(
+            "Deseja desistir somente desta rodada? Você continuará na próxima."
+        )
+    ) {
         return;
     }
 
-
     try {
+        await api("/api/desistir", {
+            sala: salaAtual,
+            jogador: jogadorAtual
+        });
 
-        const resultado =
-            await fetch(
-                "/api/responder",
-                {
-                    method: "POST",
+        const campo = document.getElementById("resposta");
 
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body: JSON.stringify({
-
-                        sala:
-                            salaAtual,
-
-                        jogador:
-                            jogadorAtual,
-
-                        resposta:
-                            resposta
-                    })
-                }
-            );
-
-
-        const dados =
-            await resultado.json();
-
-
-        if (!dados.ok) {
-
-            mensagem(
-                "mensagemJogo",
-                dados.erro
-            );
-
-            return;
+        if (campo) {
+            campo.value = "";
         }
-
-
-        campo.disabled = true;
-
-
-        document
-            .getElementById(
-                "botaoResponder"
-            )
-            .disabled = true;
-
-
-        if (dados.correta) {
-
-            mensagem(
-                "mensagemJogo",
-                "✅ Resposta correta! +10 pontos."
-            );
-
-        } else {
-
-            mensagem(
-                "mensagemJogo",
-                "❌ Resposta incorreta."
-            );
-        }
-
-
-        atualizarEstado();
-
-    } catch (erro) {
 
         mensagem(
             "mensagemJogo",
-            "Erro ao enviar resposta."
+            "Você desistiu desta rodada. Continuará jogando na próxima!"
         );
+
+        await atualizarEstado();
+    } catch (erro) {
+        mensagem("mensagemJogo", erro.message);
     }
 }
-
 
 async function proximaRodada() {
-
     try {
+        const resultado = await api("/api/proxima", {
+            sala: salaAtual,
+            jogador: jogadorAtual
+        });
 
-        const resposta =
-            await fetch(
-                "/api/proxima",
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body: JSON.stringify({
-
-                        sala:
-                            salaAtual,
-
-                        jogador:
-                            jogadorAtual
-                    })
-                }
-            );
-
-
-        const dados =
-            await resposta.json();
-
-
-        if (!dados.ok) {
-
-            mensagem(
-                "mensagemJogo",
-                dados.erro
-            );
-
+        if (resultado.fim) {
+            await atualizarEstado();
             return;
         }
 
+        const campo = document.getElementById("resposta");
 
-        if (dados.fim) {
-
-            atualizarEstado();
-
-            return;
+        if (campo) {
+            campo.value = "";
         }
 
-
-        ultimaRodada = 0;
-
-        atualizarEstado();
-
+        mensagem("mensagemJogo", "");
+        await atualizarEstado();
     } catch (erro) {
-
-        mensagem(
-            "mensagemJogo",
-            "Erro ao avançar a rodada."
-        );
+        mensagem("mensagemJogo", erro.message);
     }
 }
 
+function renderizarFinal(estado) {
+    renderizarPlacar(estado.jogadores);
 
-function atualizarFinal(
-    dados
-) {
+    const container = document.getElementById("resultadoFinal");
 
-    const container =
-        document.getElementById(
-            "resultadoFinal"
-        );
+    if (!container) {
+        return;
+    }
 
+    container.innerHTML = "";
 
-    container.innerHTML =
-        "<h3>🏆 Placar final</h3>";
+    const jogadores = estado.jogadores
+        .slice()
+        .sort((a, b) => b.pontos - a.pontos);
 
+    jogadores.forEach((jogador, indice) => {
+        const linha = document.createElement("p");
+        linha.textContent =
+            `${indice + 1}º — ${jogador.nome}: ${jogador.pontos} pontos`;
+        container.appendChild(linha);
+    });
 
-    const jogadores =
-        [...dados.jogadores];
-
-
-    jogadores.sort(
-        (a, b) =>
-            b.pontos - a.pontos
-    );
-
-
-    jogadores.forEach(
-        (jogador, index) => {
-
-            const div =
-                document.createElement("div");
-
-
-            div.className =
-                "resultado-item";
-
-
-            if (index === 0) {
-                div.classList.add(
-                    "vencedor"
-                );
-            }
-
-
-            div.innerHTML = `
-                <strong>
-                    ${index + 1}º —
-                    ${escapeHtml(jogador.nome)}
-                </strong>
-
-                <br>
-
-                ${jogador.pontos} pontos
-            `;
-
-
-            container.appendChild(div);
-        }
-    );
+    if (
+        jogadores.length >= 2 &&
+        jogadores[0].pontos === jogadores[1].pontos
+    ) {
+        const empate = document.createElement("h3");
+        empate.textContent = "🤝 Empate!";
+        container.appendChild(empate);
+    } else if (jogadores.length > 0) {
+        const vencedor = document.createElement("h3");
+        vencedor.textContent = `🏆 Vencedor: ${jogadores[0].nome}`;
+        container.appendChild(vencedor);
+    }
 }
-
 
 function voltarMenu() {
-
     if (intervalo) {
-
         clearInterval(intervalo);
-
-        intervalo = null;
     }
 
-
+    intervalo = null;
     salaAtual = "";
     jogadorAtual = "";
     nomeAtual = "";
+    estadoAnterior = null;
+    rodadaAnterior = null;
 
-    ultimaRodada = 0;
+    const nome = document.getElementById("nomeMenu");
+    const codigo = document.getElementById("codigoMenu");
 
+    if (nome) nome.value = "";
+    if (codigo) codigo.value = "";
 
-    document
-        .getElementById("nomeMenu")
-        .value = "";
-
-
-    document
-        .getElementById("codigoMenu")
-        .value = "";
-
-
-    mensagem(
-        "mensagemMenu",
-        ""
-    );
-
-
+    mensagem("mensagemMenu", "");
     mostrarTela("menu");
 }
-
-
-function escapeHtml(texto) {
-
-    const div =
-        document.createElement(
-            "div"
-        );
-
-    div.textContent =
-        texto;
-
-    return div.innerHTML;
-}
-
-
-document.addEventListener(
-    "keydown",
-    function(event) {
-
-        if (
-            event.key === "Enter" &&
-            document
-                .getElementById("jogo")
-                .classList
-                .contains("ativa")
-        ) {
-
-            const botao =
-                document.getElementById(
-                    "botaoResponder"
-                );
-
-            if (
-                !botao.disabled
-            ) {
-
-                responder();
-            }
-        }
-    }
-);
-
-
-document.addEventListener(
-    "DOMContentLoaded",
-    function() {
-
-        carregarCategorias();
-
-    }
-);
