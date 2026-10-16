@@ -1,19 +1,109 @@
 
-function renderizarPlacar(jogadores) {
-    const placar = document.getElementById("placar");
-    placar.innerHTML = "";
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stop Game</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='jogo.js') }}" defer></script>
+</head>
+<body>
+    <header>
+        <h1>🎯 Stop Game</h1>
+        <p>Desafie seus amigos e mostre quem conhece mais palavras!</p>
+    </header>
 
-    const titulo = document.createElement("h3");
-    titulo.textContent = "🏆 Placar";
-    placar.appendChild(titulo);
+    <main>
+        <section id="menu" class="tela ativa">
+            <h2>Entrar no jogo</h2>
 
-    jogadores
-        .slice()
-        .sort((a, b) => b.pontos - a.pontos)
-        .forEach(jogador => {
-            const linha = document.createElement("p");
-            linha.textContent =
-                `${jogador.nome}: ${jogador.pontos} pontos`;
-            placar.appendChild(linha);
-        });
-}
+            <label for="nomeMenu">Seu nome</label>
+            <input id="nomeMenu" type="text" maxlength="30" placeholder="Digite seu nome">
+
+            <button onclick="criarSala()">Criar sala</button>
+
+            <hr>
+
+            <label for="codigoMenu">Código da sala</label>
+            <input id="codigoMenu" type="text" maxlength="5" placeholder="Ex.: A1B2C">
+
+            <button onclick="entrarSala()">Entrar na sala</button>
+
+            <p id="mensagemMenu" class="mensagem"></p>
+        </section>
+
+        <section id="lobby" class="tela">
+            <h2>Sala de espera</h2>
+
+            <p>Compartilhe este código com seu amigo:</p>
+            <div class="codigo" id="codigoSala"></div>
+
+            <h3>Jogadores</h3>
+            <div id="listaLobby"></div>
+
+            <div id="opcoesHost">
+                <h3>Configurar partida</h3>
+
+                <label for="rodadas">Quantidade de rodadas</label>
+                <select id="rodadas">
+                    <option value="3">3 rodadas</option>
+                    <option value="5" selected>5 rodadas</option>
+                    <option value="10">10 rodadas</option>
+                    <option value="15">15 rodadas</option>
+                    <option value="20">20 rodadas</option>
+                </select>
+
+                <h3>Categorias</h3>
+                <div id="categorias" class="categorias"></div>
+
+                <button onclick="iniciarJogo()">Iniciar partida</button>
+            </div>
+
+            <p id="mensagemLobby" class="mensagem"></p>
+            <button class="secundario" onclick="voltarMenu()">Voltar ao menu</button>
+        </section>
+
+        <section id="jogo" class="tela">
+            <div class="informacoes">
+                <span>Rodada <strong id="rodadaAtual">1</strong> de
+                    <strong id="totalRodadas">5</strong></span>
+                <span>Respostas: <strong id="respostasRecebidas">0</strong>/2</span>
+            </div>
+
+            <div class="desafio">
+                <p>Letra da rodada</p>
+                <div id="letraAtual" class="letra">A</div>
+                <p>Categoria: <strong id="categoriaAtual">Nome</strong></p>
+            </div>
+
+            <label for="resposta">Sua resposta</label>
+            <input id="resposta" type="text" maxlength="100" placeholder="Digite uma palavra">
+
+            <div class="botoes">
+                <button id="botaoResponder" onclick="responder()">Responder</button>
+                <button id="botaoCorrigir" onclick="corrigirPalavra()">Corrigir palavra</button>
+                <button id="botaoDesistir" class="perigo" onclick="desistirRodada()">Desistir desta rodada</button>
+                <button id="botaoProxima" onclick="proximaRodada()">Próxima rodada</button>
+            </div>
+
+            <p id="mensagemJogo" class="mensagem"></p>
+
+            <div id="resultadoRodada"></div>
+            <div id="placar"></div>
+
+            <button class="secundario" onclick="voltarMenu()">Voltar ao menu</button>
+        </section>
+
+        <section id="final" class="tela">
+            <h2>🏆 Fim de jogo!</h2>
+            <div id="resultadoFinal"></div>
+            <button onclick="voltarMenu()">Voltar ao menu</button>
+        </section>
+    </main>
+
+    <footer>
+        <p>Stop Game — Divirta-se jogando!</p>
+    </footer>
+</body>
+</html>
