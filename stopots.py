@@ -1,3 +1,7 @@
+from flask import Flask, render_template, request, jsonify
+
+app = Flask(__name__)
+
 def fechar_rodada(sala):
     if len(sala["respostas"]) < 2 or sala["resultado"]:
         return
